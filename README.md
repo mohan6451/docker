@@ -66,10 +66,36 @@ Image is static, Server is running version of OS
 
 if you run image you get container(running instance of image)
 
-docker ps -> running containers
+docker ps -> all running docker containers
+docker ps -a -> all containers
 docker pull nginx -> pulling the nginx image
 docker images -> images in the local docker repo
 
 docker pull + docker create ImageID + docker start ContainerID
 
 docker run = docker pull + create + start
+
+docker pull <image name>:<tag>  -> to pull the image form docker hub
+docker create <image name> or <id> -> to create the container from image
+docker start <container ID> -> to start the container
+
+or 
+
+docker run <imagename:tag> -> to pull + create container + start container
+docker run -d <imagename:tag> -> to run background
+
+docker stop containerID -> to stop the container
+docker rm <container ID> -> to rm the container
+docker rmi <containerID> -> to remove the container image
+
+to change the port no. of the container:
+
+docker run -d -p <host port>:<container port> nginx
+
+note: 1. host port means from this machine which port you want to assign to nginx.
+      2. container port is from docker which port it need to ping the nginx container. 
+ex: nginx ip is 8099 then cmd should be | docker run -d -p 8099:80 nginx  |  URL = http://IP:8099 | 
+
+docker rm -f <container ID> -> to force remove the container without stopping
+
+
