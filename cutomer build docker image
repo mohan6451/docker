@@ -10,4 +10,68 @@ Docker build -t <image-name>:<version> .
   note: here "." represents the current directory, means Dockerfile is in current directory.
 
 pull this to docker server and run the above command from 
-  
+
+RUN:
+run instuction is used to configure the image. like installing, packages, configuration, creating user... (system packages + app. runtime +)
+
+in Dockerfile add which run time need to install (run dnf install nginx -y)
+
+then pull to docker server and run the below command to excute the docker file
+
+docker build -t <image name>:version
+or 
+docker build --no-cache --progress=plain -t <image name>:version
+
+
+CMD: 
+referring the base image
+configuring using RUN instruction
+
+CMD ["nginx", "-g", "daemon off;"]
+ this above command is = to systemctl start inginx
+
+ as systemctl is a like a plugin for the kernal to ease the executing
+
+ CMD ["systemctl", "start", "nginx"] -> this will not work inside container, because does not have capabilities to contact kernal
+
+ note: instruction inside CMD should run the container for infinite time. command we are giving inside CMD should run in foreground, then we should take it into background
+
+RUN -> executes at the time of image building
+CMD -> executes at the time of container starting
+
+
+CMD - instruction used to start the container. 
+
+
+image can have multiple run instructions.
+cmd should be only one, if we give multiple CMD last one is only considered.
+
+Note: After running the build the docker run <image id>:<version> has to run to run the container
+
+label:
+
+  Label added the metadata to image and can be used to filter the images.
+
+  in Dockerfile 
+
+    label author="mohan" \
+          version="3.0" \
+          email="mohan@gmail.com"
+
+      note: "\" backstash is used to add extra label to the image
+
+    command:  docker images -f "label=author=Mohan"
+
+
+Expose:
+  it will not do any functionality to the image or container. Just to add the info. about the ports used by containers. 
+
+  just for info. to understand
+
+  In Dockerfile will mention it as
+            EXPOSE 80/tcp
+
+        we can see these details while inspecting the image or container
+
+        command: docker inspect <image name> 
+

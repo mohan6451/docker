@@ -96,6 +96,8 @@ note: 1. host port means from this machine which port you want to assign to ngin
       2. container port is from docker which port it need to ping the nginx container. 
 ex: nginx ip is 8099 then cmd should be | docker run -d -p 8099:80 nginx  |  URL = http://IP:8099 | 
 
+            -d -> detach | -p -> port binding
+
 docker rm -f <container ID> -> to force remove the container without stopping
 
 To login to the container:
@@ -105,5 +107,6 @@ docker exec -it <containerID> bash
 :/usr/share/nginx/html -> where iis file is located
 
 to get the container/image details: docker inspect <container ID>/<imageID>
+
 
 
