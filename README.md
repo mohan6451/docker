@@ -88,7 +88,7 @@ docker stop containerID -> to stop the container
 docker rm <container ID> -> to rm the container
 docker rmi <containerID> -> to remove the container image
 
-to change the port no. of the container:
+To change the port no. of the container: port binding
 
 docker run -d -p <host port>:<container port> nginx
 
@@ -97,5 +97,14 @@ note: 1. host port means from this machine which port you want to assign to ngin
 ex: nginx ip is 8099 then cmd should be | docker run -d -p 8099:80 nginx  |  URL = http://IP:8099 | 
 
 docker rm -f <container ID> -> to force remove the container without stopping
+
+To login to the container:
+
+docker exec -it <containerID> bash
+
+:/usr/share/nginx/html -> where iis file is located
+
+to get the container details: docker inspect <container ID>
+
 
 
