@@ -104,7 +104,6 @@ docker exec -it <containerID> bash
 
 :/usr/share/nginx/html -> where iis file is located
 
-to get the container details: docker inspect <container ID>
-
+to get the container/image details: docker inspect <container ID>/<imageID>
 
 
