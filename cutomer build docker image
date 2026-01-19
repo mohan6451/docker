@@ -1,0 +1,13 @@
+Creating the Docker image process:
+Dockerfile -> instructions to build custom images
+
+Dockerfile first instruction should be FROM:
+1. create the new repository and create the dir. naming "Dockerfile". inside create file name "FROM" 
+2. slect any OS from dockerhum website and mention in FROM file (FROM almalinux:9)
+
+Docker build -t <image-name>:<version> .
+
+  note: here "." represents the current directory, means Dockerfile is in current directory.
+
+pull this to docker server and run the above command from 
+  
