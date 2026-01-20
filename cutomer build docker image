@@ -46,7 +46,7 @@ CMD - instruction used to start the container.
 image can have multiple run instructions.
 cmd should be only one, if we give multiple CMD last one is only considered.
 
-Note: After running the build the docker run <image id>:<version> has to run to run the container
+Note: After running the build the docker run <image id>:<version> has to run to update and run the container.
 
 label:
 
