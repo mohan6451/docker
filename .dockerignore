@@ -1,0 +1,21 @@
+# Ignore version control and editor files
+.git
+.gitignore
+.vscode
+.idea
+
+# Ignore local dependencies (Docker will install these cleanly inside the container)
+node_modules
+venv
+__pycache__
+
+# Ignore secrets and local environment configs
+.env
+.env.*
+*.pem
+
+# Ignore logs, temporary files, and Docker files themselves
+*.log
+tmp/
+Dockerfile
+compose.yaml

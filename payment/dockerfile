@@ -1,0 +1,40 @@
+# FROM python:3.9
+# WORKDIR /app
+# EXPOSE 8080
+# COPY requirements.txt payment.ini payment.py rabbitmq.py .
+# RUN pip3 install -r requirements.txt
+# ENV CART_HOST="cart" \
+#     CART_PORT="8080" \
+#     USER_HOST="user" \
+#     USER_PORT="8080" \
+#     AMQP_HOST="rabbitmq" \
+#     AMQP_USER="roboshop" \
+#     AMQP_PASS="roboshop123"
+# CMD [ "uwsgi","--ini","payment.ini" ]
+
+
+FROM python:3.9-slim AS build
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev
+COPY requirements.txt .
+RUN pip3 install --prefix=/requiredlib -r requirements.txt
+
+
+FROM python:3.9-slim 
+WORKDIR /app
+EXPOSE 8080
+RUN groupadd -r roboshop && useradd -r -g roboshop roboshop && \
+    chown -R roboshop:roboshop /app
+COPY --from=build /requiredlib /usr/local
+COPY --chown=roboshop:roboshop payment.ini payment.py rabbitmq.py ./
+LABEL build_by="mohan"
+ENV CART_HOST="cart" \
+    CART_PORT="8080" \
+    USER_HOST="user" \
+    USER_PORT="8080" \
+    AMQP_HOST="rabbitmq" \
+    AMQP_USER="roboshop" \
+    AMQP_PASS="roboshop123"
+USER roboshop
+
+CMD [ "uwsgi","--ini","payment.ini" ]

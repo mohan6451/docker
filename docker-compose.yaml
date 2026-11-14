@@ -1,0 +1,90 @@
+services:
+  catalogue:
+    build: 
+      context: ./catalogue
+      dockerfile: dockerfile # incase the dockerfile name is different
+    image: catalogue:v1
+    container_name: catalogue
+    depends_on:
+      - mongodb
+  mongodb:
+    build: ./mongodb
+    image: mongodb:v1
+    container_name: mongodb
+    volumes:  # -v mongodb:/data/db  
+      - mongodb:/data/db   # we can get these db path from docker hub offical
+  user:
+    build: 
+      context: ./user
+      dockerfile: dockerfile
+    image: user:v1
+    container_name: user
+    depends_on:
+      - mongodb
+      - redis
+  redis:
+    image: redis:7.0
+    container_name: redis
+    volumes:
+      - redis:/data
+  cart:
+    build:
+      context: ./cart
+      dockerfile: dockerfile
+    image: cart:v1
+    container_name: cart
+    depends_on:
+      - catalogue
+      - redis
+  shipping:
+    build: ./shipping
+    image: shipping:v1
+    container_name: shipping
+    depends_on:
+      - cart
+      - mysql
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    volumes:
+      - mysql:/var/lib/mysql
+  payment:
+    build: ./payment
+    image: payment:v1
+    container_name: payment
+    depends_on:
+      - user
+      - cart
+      - rabbitmq
+  rabbitmq:
+    image: rabbitmq:3
+    container_name: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: roboshop
+      RABBITMQ_DEFAULT_PASS: roboshop123
+    volumes:
+     - rabbitmq:/var/lib/rabbitmq
+  frontend:
+    build: ./frontend
+    image: frontend:v1
+    container_name: frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - catalogue
+      - cart
+      - user
+      - shipping
+      - payment
+
+networks:
+  default:
+    driver: bridge
+    name: roboshop
+    external: false # false means compose will create the network roboshop 
+
+volumes:
+  mongodb:
+  redis:
+  mysql:
+  rabbitmq: 
