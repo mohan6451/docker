@@ -52,6 +52,8 @@ services:
     build: ./payment
     image: payment:v1
     container_name: payment
+    environment:
+      AMQP_PASS: ${AMQP_PASS}
     depends_on:
       - user
       - cart

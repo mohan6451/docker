@@ -1,204 +1,251 @@
-# My understanding after watching, exploring and practising Docker:
+# Optimized Docker Image: Python/uWSGI Payment Microservice
 
-### docker: 
-    is the orchestration platform used to build, ship and run the application. by using the base machine resource with the help of docker engine. 
-    
-    docker engine  places the role to communicate between the containers and host kernel.
+A sample payment microservice (from a learning project) containerized with a multi-stage Dockerfile.
+**Image size: 1.63 GB → 210 MB (~87% smaller)**, running as a non-root user.
 
-## dockerfile:
-    File that contains the step by step instructions on how to build the environment, Includes the base OS, system packages, appcode, app runtime, app libraries, metadata.
-    name of the file can be dockerfile default or we can place the custom name.
+## What's inside
+- `Dockerfile`: multi-stage build on `python:3.9-slim`
+- `payment.ini`, `payment.py`, `rabbitmq.py`: application files
+- `Note.md`: issues I hit and how I fixed them
+- Docker learning notes (below)
 
-### docker image: 
-    is the static template build from the dockerfile.
+## Key techniques
+- **Multi-stage build:** compile in stage 1, ship only the installed libraries in stage 2
+- **Same base image for both stages:** avoids missing shared libraries (`libxml2.so.2`, Exit Code 127)
+- **`pip --prefix=/requiredlib`:** copies only the installed packages, leaving compilers and caches behind
+- **Non-root user:** runs as `roboshop`, with no hardcoded uid/gid in `payment.ini`
+- **Layer caching:** `requirements.txt` is copied before the app code
+- **No secrets in the image:** `AMQP_PASS` is passed at runtime
 
-### docker container: 
-    is the live, running instances of the docker image. 
+## Build and run
+```bash
+docker build -t payment:v1 .
+docker images payment:v1
 
-### docker-compose: 
-    its in yaml format. its a tool for defining and running the multi containers applications. 
+docker run -d --name payment \
+  -e AMQP_PASS=<your-password> \
+  -p 8080:8080 payment:v1
+```
 
-    To run an application it has frontend, backend(multiple services) and databases. everytime we need to run the build, run commands. they is chance for human errors and lot of human effort to make the services run. so instead we can give all the instructions and place them in a file. so that we can make the services running with just by running this file. it helps to build the images, services, volumes, networks.
+## Verify
+```bash
+docker run --rm payment:v1 id                  # shows roboshop, not root
+docker inspect payment:v1 | grep -i AMQP_PASS  # prints nothing
+```
 
-        docker compose up -d --build 
-        docker compose ps
-        docker compose logs  - we can also use docker compose logs <container> to check the logs of the container
-        docker compose down  - to stop and remove the containers build
-### .dockerignore: 
-    the file which tells docker which files and folders to ignore when building the docker images. just need to provide the files or folders location. 
-    When we run docker build command, the Docker CLI gathers everything in your project folder (called build context) and sends it to the Docker daemon. CLI filters out any matching files and directories before sending the context to the daemon.
+## Before / after
+<!-- paste your `docker images` screenshot here -->
 
-    it helps to build the images faster, smaller, cleaner and better security (.env, secrets)
+---
 
-    you can check the .dockerignore file from this repo. for reference.
+# My Docker Learning Notes
 
+## 1. Docker and Docker Engine
 
-### Docker hub:
+**Docker** is a containerization platform used to build, ship and run applications. Containers share the host machine's OS kernel instead of booting a full virtual machine, so they are lightweight and start fast.
 
-    where we can get the base images, custom images and we can also push our custom build images make them private or public simply as a registry to store the images as the library 
+**Docker Engine** is the client-server application that does the work. It has three parts:
 
-    Docker Hub is a cloud-based container registry that serves as a central library for storing, sharing, and distributing Docker images.
+- **Docker CLI (`docker`):** the command-line tool where you type commands such as `docker build` and `docker run`.
+- **REST API:** the layer that carries CLI commands (and requests from other tools) to the daemon.
+- **Docker Daemon (`dockerd`):** the background service that manages images, containers, networks and volumes.
 
+### What happens on `docker run`
+1. **Translate:** the CLI converts the command into a REST API request.
+2. **Receive:** the request reaches `dockerd` over a local socket or the network.
+3. **Pull:** the daemon checks for the image locally, or downloads it from a registry such as Docker Hub.
+4. **Run:** `dockerd` hands execution to `containerd` and `runc`, which start the isolated process.
 
-### Volume: 
-    container are epheramals as we know so to we need the vol to be mounted to not loose the data. and mount back when the container restarts. volumes keep data safe outside the container lifecycle.
+### Under the hood
+- **Namespaces:** isolate each container's processes, network and file system.
+- **Control groups (cgroups):** limit and monitor CPU, memory and disk I/O per container.
+- **Union file systems (OverlayFS):** stack read-only image layers under a thin writable container layer.
 
-    types: named and unnamed
-    
-    1. named: (-v name:/app/data)
-    managed directly by docker in the dedicated storage area on the host machine (docker volume inspect <volume-name>)
-    2. unnammed:
-            bind mounts: (-v ./src:./app/src)
-    maps an exact file or folder path from host machine directly into container
-            tmpfs mounts: stores temporary data strictly in the host machine's RAM (never written to disk). Best for sensitive session tokens or high-speed temporary caches.
+### Role with the kernel
+- **At start and stop:** the engine (via `containerd` and `runc`) asks the kernel to create namespaces and apply cgroup limits.
+- **While running:** the container is a normal isolated process that talks to the host kernel directly through system calls, so there is little overhead.
 
+## 2. Dockerfile, image, container
 
+- **Dockerfile:** a text file with step-by-step instructions for building an environment: base OS, system packages, app code, runtime, libraries and metadata. The default name is `Dockerfile`, but a custom name can be used with `-f`.
+- **Image:** a static, read-only template built from a Dockerfile.
+- **Container:** a live, running instance of an image.
 
-## docker networks:
-isolated virtual network that allows containers to communicate securely with each other, the host machine and the outside internet.
+## 3. Dockerfile instructions
 
-### network drivers:
-    bridge (default): 
-        Creates a private internal network on your host machine. Containers attached to a custom bridge network can find and talk to each other automatically using their container names (via Docker's built-in DNS).
+| Instruction | Purpose |
+|---|---|
+| `FROM <image>:<tag>` | Sets the base image |
+| `WORKDIR <path>` | Sets the default working directory |
+| `RUN <command>` | Runs a shell command at build time |
+| `COPY <src> <dest>` | Copies files from the build context into the image |
+| `ADD <src> <dest>` | Like `COPY`, but can also download from a URL and auto-extract local `.tar` files |
+| `ARG KEY=value` | Build-time variable; not available inside the running container |
+| `ENV KEY=value` | Variable available while the container runs |
+| `LABEL key=value` | Adds metadata |
+| `EXPOSE <port>` | Documents the port the app listens on; it does not publish it (use `-p` for that) |
+| `ONBUILD <instruction>` | Adds a trigger that runs when another Dockerfile uses this image as its base |
+| `USER <username>` | Switches the user for all later instructions and for the running container |
+| `ENTRYPOINT ["executable", "param"]` | Sets the main executable; can be overridden only with `--entrypoint` |
+| `CMD ["executable", "param"]` | Default command or default arguments; easily overridden at `docker run` |
 
-    host:  
-        Removes network isolation between the container and the host machine, letting the container use the host's IP address and ports directly.
+> If both `ENTRYPOINT` and `CMD` are defined, `CMD` provides the default arguments to `ENTRYPOINT`.
 
-    none:
-        Completely disables all networking for a container, isolating it from both other containers and external networks.
+### How to write a Dockerfile
+1. Pick a suitable minimal base image (with the compiler if you need to build).
+2. Copy the dependency list and install it.
+3. Set non-secret `ENV` values. Inject secrets at runtime instead.
+4. Copy the code and compile or bundle it.
+5. Add the runtime command (`CMD` / `ENTRYPOINT`).
 
-    
-    docker network create <name>: Creates a custom bridge network.
+### What a production container needs, by language
 
-# dockerfile building instructions:
+| Language | Build output | Production container needs |
+|---|---|---|
+| Go / C++ / Rust | Native binary | Almost nothing: `scratch`, `alpine` or distroless |
+| Java / C# | Bytecode (`.jar` / `.dll`) | A runtime (JRE / .NET runtime) |
+| TypeScript / React | Static JS and CSS (`dist/`) | A web server (Nginx) or Node.js |
+| Python | No separate compile step* | The Python interpreter |
 
-    FROM <image:tag>    : sets the base image
-    
-    WORKDIR <path>      : set the default working directory
-    
-    RUN <command>       : execute the shell command during image build stage
-    
-    COPY <source> <destination>     :copies the file/folder to the container's file system (build context)
-    
-    ADD <source> <destination>    : same as copy instruction + download the context from internet and can un tar the .tar files
-    
-    ARG <key:value>     :build time variables at the build stage, not available inside container
-    
-    ENV <key:value>     :to provide variables at availbe while the container runs
-    
-    LABEL <key:value>       :to provide the metadata 
-    
-    EXPOSE <port>       : provide only info. about the open ports
-    
-    ONBUILD <instruction>       : adds the trigger instruction to an image that executes automatically later when another dockerfile uses this image as its base image.  
-    
-    USER <username>     : switches the active user inside the container for all subsequents commands for container security
-    
-    ENTRYPOINT [ "executable", "param" ]        : similar to CMD but here the executable is dedicated, that can't be overridden at runtime
-    
-    CMD [ "executable", "param" ]       :default startup command that needs to run the container
+\*Python packages with C extensions (like `uwsgi`) do compile during install, so they need `gcc` in the build stage.
 
-##### Note: If both ENTRYPOINT and CMD are defined, CMD acts as default arguments passed to ENTRYPOINT
+## 4. Layering
 
+An image is a stack of read-only layers. `RUN`, `COPY` and `ADD` create filesystem layers; other instructions only add metadata.
 
-# Docker  best practices:
+- **Build caching:** Docker caches each layer. If you change app code but not `requirements.txt`, the dependency layer is reused instead of reinstalled.
+- **Shared storage:** ten containers from the same base image share one copy of its layers on disk.
+- **Faster transfers:** push and pull only move the layers that changed.
 
-    1. use offical small images like alpine and slim
-    2. use multi-stage build
-    3. use vol. and custom network (bridge)
-    4. use labels and expose
-    5. Optimize layers
-    6. don't harcode secrets or ENV
-    7. use .dockerignore to not to dump unnecessary data to container
-    8. don't use root user to tight the security for container
-    9. use ENTRYPOINT and CMD 
+Tips:
+1. Combine related `RUN` commands to avoid extra layers.
+2. Order instructions from least to most frequently changed (dependencies first, app code last).
 
+## 5. Multi-stage builds
 
-# Docker Multi-stage:
-    is to reduce the image size and faster deployments, by using the separate build environment from the runtime environment inside a single Dockerfile. This allows you to compile code with heavy development tools and then copy only the final application into a tiny, clean production image means lesser attack surface. small image means fewer vulnerabilities(fewer packages that require security patches).
+Use a separate build environment and runtime environment in one Dockerfile. Compile with heavy tools in the first stage, then copy only the final output into a small, clean image. The result is a smaller image, faster deployments and a smaller attack surface, because fewer packages means fewer things to patch.
 
-#### Note: you can refer the dockerfile in this repo.
+See the `Dockerfile` in this repo for a working example.
 
-# layering: docker works on layering. 
-    Docker image layering is the mechanism Docker uses to build, store, and run images as a stack of read-only filesystem layers, where each layer represents a specific instruction from your Dockerfile.
+## 6. `.dockerignore`
 
-    1. one instruction one layer so optimize the layers by combining the related insturction
-    2. order from least to most frequently changed
+A plain-text file listing files and folders Docker should leave out of the build context. When you run `docker build`, the CLI collects the project folder (the build context), filters out anything matching `.dockerignore`, then sends the rest to the daemon.
 
-## commands:
-    docker pull + docker create ImageID + docker start ContainerID
+- Syntax: file names (`config.json`), nested paths (`backend/config/local.json`) or folders (`node_modules/`), relative to the project root.
+- **Faster builds:** skips heavy folders like `node_modules` or `venv`.
+- **Smaller images:** keeps logs, tests and temp files out.
+- **Better security:** keeps `.env` files, SSH keys and `.git` history out of image layers.
 
-    docker run = docker pull + create + start
+## 7. Docker Hub
 
-    docker pull <image name>:<tag>  -> to pull the image form docker hub
-    docker create <image name> or <id> -> to create the container from image
-    docker start <container ID> -> to start the container
+A cloud-based container registry for storing, sharing and distributing images.
 
-# commands we use most common:
+- **Pull:** download official base images (`ubuntu`, `node`, `postgres`, ...).
+- **Push:** upload your own images for backup, team use or deployment.
+- **Access control:** repositories can be public or private.
 
-    docker build -t <image:version> <location of the file>      : to build the image
-    docker run -d <image:version>       :to run the container                                          
-    docker run -d --name <container-name> -p <host-port>:<container-port> --network <network-name> -v <host-path-or-volume>:<container-path> <image>:<tag>
-    docker run -d --name my-nginx -p 8080:80 --network app-net -v ./html:/usr/share/nginx/html nginx:1.27
-    docker exec -it <container> bash        :to login the container
-    docker ps       :to show the all running containers
-    docker images       :to get all the availabe images
-    docker inspect <container/vol/network/images>      :to retrive the metadata or details about
-    docker volume ls        :to list all the vol. 
-    docker network --help     :to get details about the network
-    docker rm <container_id/name>      :to remove the container
-    docker rmi <image>      :to remove the image
-    docker stop <container>     :to stop the container
-    docker login        : to login the dockerhub
-    docker tag <image:version> <tag for that image>     : to add tag to the image
-        note: to push the code to the registry it need the username before the image:version like docker_hub_username/image:version
+To push, the image name must include your Docker Hub username:
 
+```bash
+docker tag payment:v1 <dockerhub-username>/payment:v1
+docker push <dockerhub-username>/payment:v1
+```
 
-to debug
-docker run --rm -it <image> bash : creates, starts & run a temporary container and automatically deletes as soon as you exit.
-docker logs <container_id>      :to get the logs of the container
-docker compose logs     :to get the logs of compose run command 
-docker compose logs --tail=50 <container>       :to get the top 50 logs of the container
+## 8. Volumes
 
+Containers are ephemeral: data written inside is lost when the container is removed. Volumes keep data outside the container lifecycle.
 
+1. **Named volume:** managed by Docker in its own storage area on the host.
+   `docker run -v mydata:/app/data ...` (inspect with `docker volume inspect mydata`)
+2. **Anonymous volume:** same as above, but Docker generates a random name.
+   `docker run -v /app/data ...`
+3. **Bind mount:** maps an exact host file or folder into the container. Use an absolute host path.
+   `docker run -v "$(pwd)/src:/app/src" ...`
+4. **tmpfs mount:** stored only in the host's RAM and never written to disk. Good for sensitive session tokens or fast temporary caches.
+   `docker run --tmpfs /app/cache ...`
 
-1. Docker Engine
+## 9. Networks
 
-Definition: Docker Engine is a client-server application that builds, runs, and manages lightweight software containers by sharing the host machine's operating system kernel.
-• Core Components:
-	• Docker CLI (docker): The command-line interface used to enter commands (e.g., docker build, docker run).
-	• REST API: The communication bridge that translates CLI commands into instructions for the background server.
-	• Docker Daemon (dockerd): The background service that manages Docker objects, including images, containers, networks, and volumes.
-• Role with the Kernel:
-	• During Setup & Shutdown: Docker Engine acts as an active manager, instructing the host kernel (via containerd and runc) to create isolated workspaces (namespaces) and set hardware limits (cgroups).
-	• During Execution: Once started, a container runs as a standard isolated process and communicates directly with the host kernel via system calls, ensuring near-native performance without translation overhead.
+An isolated virtual network that lets containers talk to each other, the host and the internet.
 
-2. Docker Compose
+- **bridge (default):** a private network on the host. On a **custom** bridge network, containers can reach each other by container name through Docker's built-in DNS. (The default bridge does not provide name-based DNS.)
+- **host:** removes network isolation; the container uses the host's IP and ports directly.
+- **none:** disables networking completely.
 
-Definition: Docker Compose is an orchestration tool used to define, configure, and run multi-container applications using a single YAML configuration file (compose.yaml).
-• Problem It Solves: Real-world applications consist of multiple components (frontend, backend microservices, and databases). Running individual docker build and docker run commands for each service requires heavy manual effort and increases the risk of human error.
-• How It Works: All setup instructions are written once inside compose.yaml. Running a single command (docker compose up) automatically builds images, creates private networks, attaches storage volumes, and starts all services together.
-• Key Benefits:
-	• Automation: Replaces repetitive manual terminal commands with a single, repeatable workflow.
-	• Consistency: Eliminates configuration typos across ports, environment variables, and volumes.
-	• Built-in Networking: Services communicate automatically using their service names instead of hardcoded IP addresses.
+```bash
+docker network create app-net     # create a custom bridge network
+```
 
-3. .dockerignore
+## 10. Docker Compose
 
-Definition: A .dockerignore file is a plain-text configuration file that specifies which files and directory paths Docker must exclude when building an image.
-• How It Works: Before running docker build, the Docker CLI filters out matching files from the build context so they are never sent to the Docker Daemon or copied into the image.
-• Path Syntax: You can specify individual file names (config.json), nested file paths (backend/config/local.json), or entire folders (node_modules/, frontend/dist/), all evaluated relative to the project root.
-• Key Benefits:
-	• Faster Builds: Excludes heavy local folders (such as node_modules or venv).
-	• Smaller Images: Keeps unnecessary logs, tests, and temporary files out of the final image.
-	• Improved Security: Prevents sensitive files (such as .env secrets, SSH keys, and .git history) from being baked into image layers.
+A tool for defining and running multi-container applications from one YAML file (`compose.yaml`).
 
-4. Docker Hub
+**Problem it solves:** a real app has a frontend, several backend services and databases. Running `docker build` and `docker run` for each one by hand takes effort and invites mistakes. With Compose, you write the setup once and start everything with one command.
 
-Definition: Docker Hub is a cloud-based container registry that serves as a central library for storing, sharing, and distributing Docker images.
-• Core Functions:
-	• Pull Base & Official Images: Download trusted, pre-built images for operating systems, runtimes, and databases (e.g., ubuntu, node, postgres) to use as a foundation for custom apps.
-	• Push Custom Images: Upload your own custom-built images to the cloud for backup, team collaboration, or server deployment.
-	• Access Control: Manage repositories as Public (open for anyone to download) or Private (restricted to authorized users and teams).
+- **Automation:** replaces repeated manual commands with one repeatable workflow.
+- **Consistency:** ports, environment variables and volumes are defined in one place.
+- **Built-in networking:** services reach each other by service name.
 
+```bash
+docker compose up -d --build   # build images and start all services
+docker compose ps              # list services
+docker compose logs            # logs for all services
+docker compose logs <service>  # logs for one service
+docker compose down            # stop and remove containers and networks
+```
 
+## 11. Common commands
+
+`docker run` = `docker pull` + `docker create` + `docker start`
+
+```bash
+docker pull <image>:<tag>            # download an image
+docker create <image>                # create a container from an image
+docker start <container>             # start a container
+
+docker build -t <image>:<version> <path>   # build an image
+docker run -d <image>:<version>            # run a container in the background
+docker run -d --name my-nginx -p 8080:80 --network app-net \
+  -v "$(pwd)/html:/usr/share/nginx/html" nginx:1.27
+
+docker exec -it <container> bash     # open a shell (use sh on alpine images)
+docker ps                            # running containers (add -a for all)
+docker images                        # list images
+docker inspect <container|volume|network|image>   # show metadata
+docker volume ls                     # list volumes
+docker network --help                # network commands
+docker stop <container>              # stop a container
+docker rm <container>                # remove a container
+docker rmi <image>                   # remove an image
+docker login                         # log in to Docker Hub
+docker tag <image>:<version> <username>/<image>:<version>   # tag for pushing
+```
+
+## 12. Debugging
+
+```bash
+docker run --rm -it <image> bash       # temporary container, deleted on exit
+docker logs <container>                # container logs
+docker logs --tail 50 <container>      # last 50 log lines
+docker compose logs --tail=50 <service>   # last 50 lines for a Compose service
+```
+
+Common failures:
+- **Exited (127):** command or shared library not found. Check `ldd` on the binary and make sure build and runtime images match.
+- **Exited (1):** the app crashed on startup. Check `docker logs`.
+- **`COPY failed: file not found`:** the file is outside the build context or excluded by `.dockerignore`.
+- **Exited (0) or container removed:** the main process finished, or the container was started with `--rm`.
+
+See `Note.md` for the full debugging story behind this project.
+
+## 13. Best practices
+
+1. Use official small base images (`slim`, `alpine`) and pin the tag.
+2. Use multi-stage builds.
+3. Use volumes for persistent data and custom bridge networks for service communication.
+4. Use `LABEL` and `EXPOSE` for documentation.
+5. Optimize layers: combine related `RUN` steps and order from least to most frequently changed.
+6. Never hardcode secrets in `ENV` or the Dockerfile; inject them at runtime.
+7. Use `.dockerignore` to keep unnecessary and sensitive files out of the image.
+8. Run as a non-root user.
+9. Use `ENTRYPOINT` and `CMD` deliberately.
