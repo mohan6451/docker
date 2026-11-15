@@ -8,8 +8,7 @@
 #     USER_HOST="user" \
 #     USER_PORT="8080" \
 #     AMQP_HOST="rabbitmq" \
-#     AMQP_USER="roboshop" \
-#     AMQP_PASS="roboshop123"
+#     AMQP_USER="roboshop" 
 # CMD [ "uwsgi","--ini","payment.ini" ]
 
 
@@ -17,10 +16,10 @@ FROM python:3.9-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev
 COPY requirements.txt .
-RUN pip3 install --prefix=/requiredlib -r requirements.txt
+RUN pip3 install --no-cache-dir --prefix=/requiredlib -r requirements.txt
 
 
-FROM python:3.9-slim 
+FROM python:3.9-slim
 WORKDIR /app
 EXPOSE 8080
 RUN groupadd -r roboshop && useradd -r -g roboshop roboshop && \
@@ -33,8 +32,8 @@ ENV CART_HOST="cart" \
     USER_HOST="user" \
     USER_PORT="8080" \
     AMQP_HOST="rabbitmq" \
-    AMQP_USER="roboshop" \
-    AMQP_PASS="roboshop123"
+    AMQP_USER="roboshop" 
+    # AMQP_PASS="roboshop123"   | We can pass password at runtime by "docker run -d --name payment -e AMQP_PASS=roboshop123 payment:v1" or can add to .env and can call for maintainint the security
 USER roboshop
 
 CMD [ "uwsgi","--ini","payment.ini" ]
