@@ -1,0 +1,38 @@
+# FROM maven:3.9.11
+# EXPOSE 8080
+# WORKDIR /app
+# COPY pom.xml .
+# COPY src ./src
+# RUN mvn clean package
+# RUN mv target/shipping-1.0.jar shipping.jar
+# ENV CART_ENDPOINT=cart:8080 \
+#     DB_HOST=mysql
+# CMD ["java","-jar","shipping.jar"]
+# #CMD ["sleep", "1000"]
+ 
+
+FROM maven:3.9.11 AS build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn clean package && \
+    mv target/shipping-1.0.jar shipping.jar
+
+
+  
+FROM eclipse-temurin:17-jre-alpine
+WORKDIR /app
+EXPOSE 8080
+RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
+ENV CART_ENDPOINT=cart:8080 \
+    DB_HOST=mysql
+LABEL project="roboshop" \
+      component="shipping" \
+      createdBy="shipping"
+COPY --from=build --chown=roboshop:roboshop /app/shipping.jar /app/
+USER roboshop
+CMD [ "shipping.jar" ]
+ENTRYPOINT [ "java","-jar" ]
+#CMD ["sleep", "1000"]
+
+

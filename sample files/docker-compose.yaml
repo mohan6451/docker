@@ -1,0 +1,53 @@
+services:
+  # 1. Backend Web Application (Built from your custom Dockerfile)
+  web-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NODE_VERSION: 20-alpine
+        APP_ENV: production
+    container_name: my-node-app
+    restart: unless-stopped
+    ports:
+      - "8080:3000" # Maps host port 8080 to container port 3000
+    environment:
+      - DB_HOST=database # Connects using the database service name below
+      - DB_USER=appuser
+      - DB_PASSWORD=secretpass
+      - DB_NAME=appdb
+    volumes:
+      - ./logs:/usr/src/app/logs # Bind mount: syncs app logs directly to host folder
+    depends_on:
+      database:
+        condition: service_healthy # Waits until Postgres passes its healthcheck
+    networks:
+      - app-network
+
+  # 2. Database Service (Pulled directly from Docker Hub)
+  database:
+    image: postgres:16-alpine
+    container_name: my-postgres-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=appuser
+      - POSTGRES_PASSWORD=secretpass
+      - POSTGRES_DB=appdb
+    volumes:
+      - postgres-data:/var/lib/postgresql/data # Named volume for persistent DB storage
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U appuser -d appdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
+# 3. Top-Level Named Volumes (Managed by Docker at /var/lib/docker/volumes/)
+volumes:
+  postgres-data:
+
+# 4. Top-Level Custom Bridge Network (Enables DNS service discovery by name)
+networks:
+  app-network:
+    driver: bridge

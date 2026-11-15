@@ -1,0 +1,31 @@
+FROM node:20.19.5-alpine3.21 as build
+WORKDIR /app
+COPY package.json /app/
+COPY *.js /app/
+RUN npm install 
+
+
+
+FROM node:20.19.5-alpine3.21 
+WORKDIR /app
+RUN addgroup -S roboshop && adduser -S roboshop -G roboshop
+RUN chown -R roboshop:roboshop /app
+EXPOSE 8080
+LABEL project="roboshop" \
+      component="catalogue" \
+      createdBy="mohan"
+ENV MONGO="true" \
+    MONGO_URL="mongodb://mongodb:27017/catalogue"
+COPY --from=build /app /app
+USER roboshop
+CMD [ "server.js"]
+ENTRYPOINT [ "node" ]
+
+# FROM node:20
+# WORKDIR /app
+# COPY catalogue-v3/package.json /app/
+# COPY *.js /app/
+# RUN npm install
+# ENV MONGO="true" \
+#     MONGO_URL="mongodb://mongodb:27017/catalogue"
+# CMD ["node", "server.js"]

@@ -1,0 +1,39 @@
+# 1. ARG (Build-time variable used before FROM)
+ARG NODE_VERSION=20-alpine
+
+# 2. FROM (Sets the base image)
+FROM node:${NODE_VERSION}
+
+# 3. ARG & ENV (Build-time argument passed into a runtime environment variable)
+ARG APP_ENV=production
+ENV NODE_ENV=${APP_ENV} \
+    PORT=3000
+
+# 4. WORKDIR (Creates and sets the active folder inside the container)
+WORKDIR /usr/src/app
+
+# 5. COPY (Copies dependency manifests first to leverage Docker layer caching)
+COPY package*.json ./
+
+# 6. RUN (Executes shell commands during build to install dependencies)
+RUN npm ci --only=production
+
+# 7. ADD (Extracts a local compressed archive directly into the image)
+ADD static-assets.tar.gz ./public/
+
+# 8. COPY (Copies the remaining application source code)
+COPY . .
+
+# 9. ONBUILD (Dormant trigger: runs ONLY if another Dockerfile uses this image as FROM)
+ONBUILD RUN echo "Building child image from this base template..."
+
+# 10. USER (Switches from root to a built-in non-root user for security)
+RUN chown -R node:node /usr/src/app
+USER node
+
+# 11. EXPOSE (Documents the internal port the app listens on)
+EXPOSE 3000
+
+# 12. ENTRYPOINT & CMD (ENTRYPOINT locks the main executable; CMD sets default arguments)
+ENTRYPOINT ["node"]
+CMD ["server.js"]
